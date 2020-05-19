@@ -3,5 +3,11 @@ remote_theme: pmarsceill/just-the-docs
 #color_scheme: "dark"
 search_enabled: false
 
+aux_links:
+  "GitHub":
+    - "//github.com/jboxman"
+
+footer_content: "Copyright 2020 Jason Boxman."
+
 ga_tracking: UA-78244275-1
 
