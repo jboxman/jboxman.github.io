@@ -1,6 +1,8 @@
 ---
-layout: post
-title:  "Working with Time Machine backups"
+layout: default
+title: Working with Time Machine backups
+parent: Tasks
+nav_order: 3
 ---
 
 # Compare TM backups

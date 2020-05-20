@@ -1,6 +1,8 @@
 ---
-layout: post
-title:  "Miscellaneous notes"
+layout: default
+title: Miscellaneous notes
+parent: Tasks
+nav_order: 2
 ---
 
 Mostly unnecessary for OS X 10.15.3.
