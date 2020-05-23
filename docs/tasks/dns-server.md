@@ -2,7 +2,7 @@
 layout: default
 title: Advanced DNS configuration for OS X
 parent: Tasks
-nav_order: 2
+nav_order: 1
 ---
 
 ## Where to find DNS configuration on OS X

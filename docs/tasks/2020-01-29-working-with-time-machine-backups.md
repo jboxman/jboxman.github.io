@@ -2,7 +2,7 @@
 layout: default
 title: Working with Time Machine backups
 parent: Tasks
-nav_order: 3
+nav_order: 4
 ---
 
 # Compare TM backups

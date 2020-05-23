@@ -2,7 +2,7 @@
 layout: default
 title: Working with photos
 parent: Tasks
-nav_order: 4
+nav_order: 6
 ---
 
 So I've spent nearly 20 years trying to tackle photo management in one way or another.

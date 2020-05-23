@@ -1,7 +1,7 @@
 ---
 layout: default
-title: Tasks
+title: Projects
 nav_order: 1
 has_children: true
-permalink: /docs/tasks
+permalink: /docs/projects
 ---
