@@ -1,23 +1,26 @@
 ---
 layout: default
-title: Working with Time Machine backups
+title: Working with Time Machine backups on OS X
 parent: Tasks
 nav_order: 4
 ---
+# Working with Time Machine backups on OS X
 
-## Delete TM protected files
+The following describes some common TM tasks.
+
+## Delete protected files
 
 ```
 /System/Library/Extensions/TMSafetyNet.kext/Contents/Helpers/bypass <rm ...>
 ```
 
-## Compare TM snapshots
+## Compare snapshots
 
 ```
 tmutil compare <snapshot1> <snapshot2> | tee /tmp/backup-compare.txt
 ```
 
-http://osxdaily.com/2012/01/21/compare-time-machine-backups-tmutil/
+(Reference: http://osxdaily.com/2012/01/21/compare-time-machine-backups-tmutil/)
 
 ## Find large differences between snapshots
 

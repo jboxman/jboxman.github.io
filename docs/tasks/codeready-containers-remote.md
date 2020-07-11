@@ -1,6 +1,6 @@
 ---
 layout: default
-title: Configure CodeReady Containers for remote access
+title: Configure CodeReady Containers for remote access (WIP)
 parent: Tasks
 nav_order: 3
 ---

@@ -1,9 +1,13 @@
 ---
 layout: default
-title: Miscellaneous notes
+title: Performing uncommon tasks on OS X / GNU/Linux
 parent: Tasks
 nav_order: 99
 ---
+
+# Performing uncommon tasks on OS X / GNU/Linux
+
+The following uncommon tasks might be performed to resolve strange or unwanted behavior, or are necessary too infrequently to remember.
 
 Mostly unnecessary for OS X 10.15.3.
 

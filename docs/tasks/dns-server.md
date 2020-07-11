@@ -1,11 +1,13 @@
 ---
 layout: default
-title: Advanced DNS configuration for OS X
+title: Configuring domain-specific DNS resolution on OS X
 parent: Tasks
 nav_order: 1
 ---
 
-## Where to find DNS configuration on OS X
+# Configuring domain-specific DNS resolution on OS X
+
+## Find DNS configuration on OS X
 
 To lists manual hosts:
 
@@ -53,10 +55,31 @@ search_order 1
 
 Based on [this](https://stackoverflow.com/questions/50914268/os-x-etc-resolver-dev-isnt-working-why-not), apps and `ping` use the system resolver. `dig`, `nslookup`, and `host` do not.
 
-## How to query a specific DNS server
+## Query a specific DNS server
 
 Useful for confirming DNS is configured correctly.
 
 ```
 dig <host> +noall +answer <dns_server>
 ```
+
+## Configure DNS by using `scutil`
+
+Add a domain specific resolver.
+
+```
+sudo scutil
+d.init
+d.add ServerAddresses * 9.9.9.9
+d.add SupplementalMatchDomains * stackexchange.com
+set State:/Network/Service/whatever-you-want-as-long-as-unique/DNS
+```
+
+Remove a domain specific resolver.
+
+```
+sudo scutil
+remove State:/Network/Service/whatever-you-want-as-long-as-unique/DNS
+```
+
+[Using scutil for configuring DNS resolution](https://apple.stackexchange.com/a/385218).
