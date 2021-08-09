@@ -13,7 +13,7 @@ aux_links:
   "GitHub":
     - "//github.com/jboxman"
 
-footer_content: "Copyright &copy; 2020 Jason Boxman. Distributed by an <a href=\"https://raw.githubusercontent.com/jboxman/jboxman.github.io/master/LICENSE\">MIT license</a>."
+footer_content: "Copyright &copy; 2020-2021 Jason Boxman. Distributed by an <a href=\"https://raw.githubusercontent.com/jboxman/jboxman.github.io/master/LICENSE\">MIT license</a>."
 
 ga_tracking: UA-78244275-1
 
