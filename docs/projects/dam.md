@@ -4,12 +4,21 @@ title: digital asset manager (dam)
 parent: Projects
 ---
 
+# digital asset manager (dam)
+{: .no_toc }
+
+Proof of concept integrating [digiKam](https://www.digikam.org) and [git-annex](https://git-annex.branchable.com).
+
 [Available on GitHub](https://github.com/jboxman/dam)
+
+## Table of contents
+{: .no_toc .text-delta }
+
+1. TOC
+{:toc}
 
 Purpose
 ----
-
-Proof of concept integrating [digiKam](https://www.digikam.org) and [git-annex](https://git-annex.branchable.com).
 
 Because of how `git-annex` works, it isn't practical to use the working directory with digiKam:
 
