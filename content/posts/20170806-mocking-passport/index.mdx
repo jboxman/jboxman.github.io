@@ -1,0 +1,256 @@
+---
+title: Mocking passport githubStrategy for functional testing
+date: 2017-08-06
+#tags: []
+---
+
+## Introduction
+
+Lately I've been exploring [OAuth](https://oauth.net/2/), but how to handle functional testing? Here I'll demonstrate an approach for testing an application that uses OAuth via the popular [passport middleware](http://passportjs.org/) for express. When we're done, we can test routes that require authentication without making any HTTPS calls to the OAuth provider.
+
+Note: I'm using [Koa](http://koajs.com/) (and thus the [koa-passport](koa-passport) wrapper module), but this approach will work with [Express](https://expressjs.com/) with modification.
+
+The relevant files are shown below:
+
+```
+app.js
+index.js
+mockProfile.js
+package.json
+node_modules/:
+…
+test/:
+index.js
+util/:
+auth.js
+mock-strategy.js
+```
+
+Each file serves a particular purpose:
+
+- `app.js`: Wrapper to bootstrap application
+- `index.js`: The application
+- `mockProfile.js`: My Github user profile data (substitute your own profile data here)
+- `package.json`: Our dependencies and scripts
+- `node_modules/`: third-party modules
+- `test/index.js`: Our tests
+- `util/auth.js`: Our authentication code
+- `util/mock-strategy`: Our mocked passport authentication strategy
+
+And our dependancies:
+
+```js
+"dependencies": {
+    "koa": "^2.3.0",
+    "koa-passport": "^3.0.0",
+    "koa-route": "^3.2.0",
+    "koa-session": "^5.4.0",
+    "passport-github2": "^0.1.10"
+  },
+  "devDependencies": {
+    "supertest": "^3.0.0",
+    "tape": "^4.8.0"
+  }
+```
+
+In the discussion that follows, I will omit some code for brevity, particularly the code that mocks a data store. Calls to `userStore.fetchUser()` and `userStore.saveUser()` reference functions defined in `util/auth.js`.
+
+## Our routes
+
+The routes for this example are shown below. When we're done, we will be able to access `/app` from within our tests.
+
+```js
+const route = require('koa-route');
+
+app.use(route.get('/auth/github',
+  passport.authenticate('github');
+));
+
+// Classic redirect behavior
+app.use(route.get('/auth/github/callback',
+  passport.authenticate('github', {
+    successRedirect: '/app',
+    failureRedirect: '/'
+  })
+));
+// Require authentication for now
+app.use(async function(ctx, next) {
+  if (ctx.isAuthenticated()) {
+    return next();
+  } else {
+    ctx.throw(403);
+  }
+});
+
+app.use(route.get('/app', function(ctx) {
+  ctx.body = ctx.state.user;
+}));
+```
+
+## Choose a strategy and provide a callback function
+
+Inside `util/auth.js`, I define a function that returns the appropriate strategy based on the `NODE_ENV` environment variable.
+
+```js
+const passport = require('koa-passport');
+const GitHubStrategy = require('passport-github2').Strategy;
+const MockStrategy = require('./mock-strategy').Strategy;
+function strategyForEnvironment() {
+  let strategy;
+  switch(process.env.NODE_ENV) {
+    case 'production':
+      strategy = new GitHubStrategy({
+      clientID: process.env.CLIENT_ID,
+      clientSecret: process.env.CLIENT_SECRET,
+      callbackURL: process.env.CALLBACK_URL
+    }, strategyCallback);
+    break;
+    default:
+    strategy = new MockStrategy('github', strategyCallback);
+  }
+  return strategy;
+}
+```
+
+The callback function shown below, `strategyCallback()`, is where we receive the result of the OAuth2 flow. Usually this is where you'll match the OAuth profile ID to a user in your database or create one if the user does not exist. This function is part of the normal configuration for passport and it is passed to both the `GitHubStrategy` and the `MockStrategy`.
+
+```js
+function strategyCallback(accessToken, refreshToken, profile, done) {
+  // Possibly User.findOrCreate({…}) or similar
+  let u = {
+    id: 1,
+    oauthId: profile.id,
+    oauthProvider: profile.provider,
+    email: profile.emails[0].value,
+    username: profile.username,
+    avatarUrl: profile._json.avatar_url
+  };
+  // synchronous in this example
+  userStore.saveUser(u);
+  done(null, u);
+}
+```
+
+At the end of `util/auth.js`, we choose our desired strategy by calling the function `strategyForEnvironment()` that we defined earlier.
+
+```
+passport.use(strategyForEnvironment());
+```
+
+## Define mock strategy
+
+The mock strategy is defined using the strategy interface provided by passport. This code lives in `util/mock-strategy.js`:
+
+```js
+// https://github.com/marcosnils/passport-dev/blob/master/lib/strategy.js
+const passport = require('passport-strategy');
+const util = require('util');
+// The reply from Github OAuth2
+const user = require('../mockProfile');
+function Strategy(name, strategyCallback) {
+  if (!name || name.length === 0) { throw new TypeError('DevStrategy requires a Strategy name') ; }
+  passport.Strategy.call(this);
+  this.name = name;
+  this._user = user;
+  // Callback supplied to OAuth2 strategies handling verification
+  this._cb = strategyCallback;
+}
+util.inherits(Strategy, passport.Strategy);
+Strategy.prototype.authenticate = function() {
+  this._cb(null, null, this._user, (error, user) => {
+    this.success(user);
+  });
+}
+module.exports = {
+  Strategy
+};
+```
+
+The code above has two important purposes: It defines the constructor function for our mock strategy which accepts our `strategyCallback()` function and it defines the `passport.authenticate()` method used in our route for `/auth/github/callback` which provides our `user` object.
+
+The flow for this looks like this:
+
+- A `GET` request is made to `/auth/github/callback`
+- `passport.authenticate()` is called
+-  `passport.authenticate()` calls our `strategyCallback()` with a faked OAuth profile and an anonymous `done` callback
+- `strategyCallback()` retrieves the correct user from a data store
+- `strategyCallback()` calls the done callback with the user object
+- The `done` callback supplied to `strategyCallback()` in `passport.authenticate()` calls `this.success()` with our user object
+- `this.success()` performs the necessary work to populate the user session
+
+Our `strategyCallback()` function defined earlier in `util/auth.js` is saved to `this._cb` in the `Strategy()` constructor function.
+
+The `passport.authenticate()` method is called by our route handling function for the `/auth/github/callback` route. Here we call `this._cb` (containing a reference to our `strategyCallback()`). As you'll recall, the function signature is `function strategyCallback(accessToken, refreshToken, profile, done)`. For our mock, we don't care about `accessToken` or `refreshToken`, so we pass `null` for both.
+
+We do care about `profile` and `done`. We mock the `profile` object, in this example using my own Github profile data. We supply a callback function for done within which we call `this.success(user)`. Our `done` callback is how `strategyCallback()` provides our final user object, the one that is serialized into the `ctx.state.user` in our example Koa app.
+
+Whoa, that's a lot to think about!
+
+## Test with sessions
+
+We can now test application routes that require authentication! Let's define a few helper methods for our tests. The first helper function wires up the server and configures `supertest` to work with it. We can use this function to set up a new instance of the server for each test.
+
+I am using `tape` as the test framework, which requires any outstanding file handles to be explicitly closed. This is the purpose behind calls to `httpServer.close()` that appear in the examples below.
+
+```js
+const prepare = () => {
+  const httpServer = app.listen();
+  const request = agent(app.callback());
+  return {
+    request,
+    httpServer
+  };
+}
+```
+
+The next helper, `createAuthenticatedUser()`, allows us to chain requests using `supertest`. It works by saving the request object to `authenticatedUser`, which persists our request state for future use. First, the function authenticates the user by accessing the `/auth/github/callback` route defined earlier. Then, it passes `authenticatedUser` to a callback function we supply to make future requests with.
+
+```js
+// https://medium.com/@juha.a.hytonen/testing-authenticated-requests-with-supertest-325ccf47c2bb
+const createAuthenticatedUser = (done) => {
+  const httpServer = app.listen();
+  const authenticatedUser = agent(app.callback());
+  authenticatedUser
+    .get('/auth/github/callback')
+    .end((error, resp) => {
+      done(authenticatedUser);
+      httpServer.close();
+  });
+}
+```
+
+Now you can test routes that require authentication. The test below calls `createAuthenticatedUser` and passes in a callback function that receives a persisted `supertest` object as its only parameter. Performing a request using this object allows the request to succeed.
+
+```js
+test('it should work', t => {
+  createAuthenticatedUser(request => {
+    request
+    .get('/app')
+    .expect(200)
+    .end((err, res) => {
+      console.log(res.body);
+      t.end(err);
+    });
+  });
+});
+```
+
+The same request without an authenticated request object will fail:
+
+```js
+test('it should deny access to /app', t => {
+ const {httpServer, request} = prepare();
+request
+  .get('/app')
+  .expect(403)
+  .end((err, res) => {
+    httpServer.close();
+    t.end(err);
+  });
+});
+```
+
+The entire repository ([koa-passport-oauth2-testing](https://github.com/jboxman/koa-passport-oauth2-testing)), with working tests, is available.
+
+Happy testing!
+

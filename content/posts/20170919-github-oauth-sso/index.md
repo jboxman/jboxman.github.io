@@ -1,0 +1,319 @@
+---
+title: Use Github OAuth as your SSO provider with React
+date: 2017-09-19
+#tags: []
+---
+
+## Use Github OAuth as your SSO provider with React
+
+This guide describes how to use [Github as an OAuth single sign-on (SSO) provider](https://developer.github.com/apps/building-oauth-apps/authorizing-oauth-apps/) for a Single Page Application (SPA) that is written in JavaScript by using the React library. The authorization code grant flow is used. (To learn more about the grant types in OAuth, read [A Guide To OAuth 2.0 Grants](https://alexbilbie.com/guide-to-oauth-2-grants/).)
+
+## Audience
+
+To get the most from this guide, you should be familiar with JavaScript, [React](https://reactjs.org/), [Redux](https://redux.js.org/), [Node.js](https://nodejs.org/en/), [Koa](https://koajs.com/), [Passport](http://www.passportjs.org/), and OAuth grants.
+
+## Problem
+
+In the OAuth authorization grant flow, the user is redirected to another page to complete the sign-in process. The flow sequence described below uses Github as the SSO provider. The server refers to the backend server for the SPA.
+
+1. User visits `https://example.com/` and the SPA loads in the browser.
+1. User clicks a link to sign in that opens `https://example.com/auth/login` in the browser.
+1. Server redirects the browser to `https://github.com/login/oauth/authorize`. The Github OAuth sign-in page is displayed.
+1. User signs in.
+1. Github redirects the browser to `https://example.com/login/oauth/callback`.
+1. Server sends a HTTP `POST` to Github.
+1. Github replies with a JSON payload that contains an access token, token type, token expiration, and refresh token.
+1. Server uses access token to request the Github user profile.
+1. Server populates the user session.
+1. Server redirects the browser to the success page.
+
+## Solution
+
+By using a new browser tab and the window.postMessage() method, you can avoid redirecting the user to a different page to complete the sign-in process. In the following modified flow sequence, the *server* refers to the backend server for the SPA. The *client* refers to the user’s browser.
+
+1. User visits `https://example.com/` and the SPA loads in the browser.
+1. User clicks a sign-in button in the SPA. A new browser tab opens and displays `https://example.com/auth/login`.
+1. Server redirects the browser to `https://github.com/login/oauth/authorize`.
+1. User is presented with the Github OAuth sign-in page and signs in.
+1. Github redirects the browser to `https://example.com/login/oauth/callback`.
+1. Server sends a HTTP `POST` to Github.
+1. Github sends back a JSON response that contains the access token, token type, token expiration, and refresh token.
+1. Server uses the access token to send a HTTP `GET` request for the Github user profile.
+1. Github sends back a JSON response with the user profile.
+1. Server populates the user session and returns a HTML success page with a JavaScript payload containing a call to `window.postMessage()` with the user object.
+1. Client executes JavaScript payload in the open browser tab. The call to `window.postMessage()` passes the user object to the original browser tab that is running the SPA.
+
+After the flow sequence completes, the SPA in the original browser tab has a copy of the user object.
+
+## Implementation
+
+In the following code, the modified flow sequence is shown for both the SPA and server.
+
+### SPA
+
+The following files define the SPA.
+
+*App.js*
+
+In `App.js`, two handler functions are defined: `handleLogIn` and `handleLogOut`. In `handleLogIn`, a call to `loginTab` creates a new tab. In the returned promise, the `user` object is passed to injectUser, which is the Redux action creator. The `handleLogOut` function dispatches the `logoutUser` action.
+
+In the `render()` function, `isAuthenticated` and `currentUser` provide access to the authentication status of the user and, if the user is signed in, the user object. A sign-in button is displayed only if the user is not signed in. Otherwise, the sign-out button is presented.
+
+The `mapStateToProps` and `mapDispatchToProps` functions define what state is passed in the props for this component and what actions can be dispatched.
+
+```js
+import React from 'react';
+import propTypes from 'prop-types';
+import { connect } from 'react-redux';
+import { bindActionCreators } from 'redux';
+
+import loginTab from '../../util/openWindow';
+import * as userActions from '../redux/userActions';
+import { STATE_KEY as USER_STATE_KEY } from '../redux/userReducer';
+
+class AppMenu extends React.Component {
+
+  handleLogIn(e, {name}) {
+    const msg = loginTab('/auth/github');
+    msg.then(user => {
+      this.props.userActions.injectUser(user);
+    });
+  }
+
+  handleLogOut(e, {name}) {
+    this.props.userActions.logoutUser();
+  }
+
+  render() {
+    const {isAuthenticated, currentUser} = this.props;
+
+    const loginButton =  isAuthenticated ?
+      <button onClick={this.handleLogOut.bind(this)}>Sign out ({currentUser.username})</button>
+      : 
+      <button onClick={this.handleLogIn.bind(this)}>Sign in</button>
+
+    return (
+      <div>
+      {loginButton}
+      </div>
+    )
+  }
+}
+
+AppMenu.PropTypes = {
+  isAuthenticated: propTypes.bool,
+  currentUser: propTypes.object
+};
+
+const mapStateToProps = state => ({
+  isAuthenticated: state[USER_STATE_KEY].isAuthenticated,
+  currentUser: state[USER_STATE_KEY].user
+});
+const mapDispatchToProps = dispatch => ({
+  userActions: bindActionCreators(userActions, dispatch)
+});
+
+export default connect(mapStateToProps, mapDispatchToProps)(AppMenu);
+```
+
+*userActions.js, userActionTypes.js, userReducer.js*
+
+The Redux state is configured in the following files:
+
+- `userActions.js`: Defines injectUser and logoutUser
+- `userActionTypes.js`: Defines Redux action constants
+- `userReducer.js`: Defines the reducer for the user object
+
+*userActions.js*
+```js
+import * as ActionTypes from './userActionTypes';
+
+export function injectUser(user = {}) {
+  return {
+    type: ActionTypes.INJECT,
+    payload: {
+      user
+    }
+  };
+};
+
+export function logoutUser() {
+  return {
+    type: ActionTypes.LOGOUT
+  }
+};
+```
+
+*userActionTypes.js*
+```js
+export const INJECT = 'INJECT_USER';
+export const LOGOUT = 'LOGOUT_USER';
+```
+
+*userReducer.js*
+```js
+import * as actionTypes from './userActionTypes';
+
+export const STATE_KEY = 'currentUser';
+
+export const initialState = {
+  isAuthenticated: false,
+  user: {}
+};
+
+export default function userReducer(state = initialState, action = {}) {
+  const {type, payload} = action;
+
+  switch(type) {
+    case actionTypes.INJECT:
+      return {
+        ...state,
+        isAuthenticated: true,
+        user: payload.user
+      };
+
+    case actionTypes.LOGOUT:
+      return {
+        ...initialState
+      };
+
+    default:
+      return state;
+  }
+};
+```
+
+*openWindow.js*
+
+The function defined in `loginTab()` opens a new tab with `myUrl` as the target and returns a promise. The promise resolves to the value that is passed from `window.postMessage()`.
+
+```js
+// From https://gist.github.com/gauravtiwari/2ae9f44aee281c759fe5a66d5c2721a2
+// By https://gist.github.com/gauravtiwari
+
+/* global window */
+
+const loginTab = (myUrl) => {
+  const windowArea = {
+    width: Math.floor(window.outerWidth * 0.8),
+    height: Math.floor(window.outerHeight * 0.5),
+  };
+
+  if (windowArea.width < 1000) { windowArea.width = 1000; }
+  if (windowArea.height < 630) { windowArea.height = 630; }
+  windowArea.left = Math.floor(window.screenX + ((window.outerWidth - windowArea.width) / 2));
+  windowArea.top = Math.floor(window.screenY + ((window.outerHeight - windowArea.height) / 8));
+
+  const sep = (myUrl.indexOf('?') !== -1) ? '&' : '?';
+  const url = `${myUrl}${sep}`;
+  const windowOpts = `toolbar=0,scrollbars=1,status=1,resizable=1,location=1,menuBar=0,
+    width=${windowArea.width},height=${windowArea.height},
+    left=${windowArea.left},top=${windowArea.top}`;
+
+  const authWindow = window.open(url, '_blank', windowOpts);
+  // Create IE + others compatible event handler
+  const eventMethod = window.addEventListener ? 'addEventListener' : 'attachEvent';
+  const eventer = window[eventMethod];
+  const messageEvent = eventMethod === 'attachEvent' ? 'onmessage' : 'message';
+
+  // Listen to message from child window
+  const authPromise = new Promise((resolve, reject) => {
+    eventer(messageEvent, (msg) => {
+      if (!~msg.origin.indexOf(`${window.location.protocol}//${window.location.host}`)) {
+        authWindow.close();
+        reject('Not allowed');
+      }
+
+      if (msg.data.payload) {
+        try {
+          resolve(JSON.parse(msg.data.payload));
+        }
+        catch(e) {
+          resolve(msg.data.payload);
+        }
+        finally {
+          authWindow.close();
+        }
+      } else {
+        authWindow.close();
+        reject('Unauthorised');
+      }
+    }, false);
+  });
+
+  return authPromise;
+};
+
+export default loginTab;
+```
+
+### Server
+
+The following files define the application server for the SPA.
+
+*userRoutes.js*
+
+The server must define several routes for the OAuth authorization code grant flow. For the [Passport](http://www.passportjs.org/) module, the following endpoints must be defined:
+
+- `/auth/github`: Requested by the client to begin the OAuth flow
+- `/auth/github/callback`: Requested by Github during the OAuth flow
+
+In the callback function for the `/auth/github/callback` route, `ctx.render()` is called to return the success page.
+
+```js
+const Router = require('koa-router');
+const passport = require('koa-passport');
+  
+const isAuthenticated = (ctx, next) => {
+  return ctx.isAuthenticated() ? next() : ctx.status = 403;
+};
+
+const router = new Router();
+
+router.get('/auth/github',
+  passport.authenticate('github')
+);
+
+// Custom handler that returns the authenticated user object
+router.get('/auth/github/callback', function(ctx) {
+  return passport.authenticate('github', async function(err, user, info) {
+    await ctx.logIn(user);
+    await ctx.render('success', {user: JSON.stringify(ctx.state.user)});
+  })(ctx);
+});
+
+module.exports = router;
+```
+
+*success.html*
+
+When the `success.html` page loads, it calls `window.postMessage()` with the injected user object.
+
+```html
+<!doctype html>
+<html lang="en">
+<head>
+  <title>Login successful</title>
+</head>
+<body>
+  <h1>Success</h1>
+  <p>You are authenticated...</p>
+</body>
+<script>
+  document.body.onload = function() {
+    var injectedUser = <%- JSON.stringify(user) %>;
+    window.opener.postMessage(
+      {
+        payload: injectedUser,
+        status: 'success'
+      },
+      window.opener.location
+    );
+  };
+</script>
+</html>
+```
+
+## Conclusion
+
+The approach described in this guide shows how to use the authorization code grant flow offered by Github OAuth while avoiding HTTP redirects.
