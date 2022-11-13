@@ -15,7 +15,7 @@ module.exports = {
     siteHeadline: `Learning through failure`,
     siteUrl: `http://edseek.com`,
     siteDescription: ``,
-    //siteImage: `/banner.jpg`,
+    siteImage: `/banner.jpg`,
     author: `@JasonBoxman`,
   },
   plugins: [
@@ -51,17 +51,21 @@ module.exports = {
             title: `About`,
             slug: `/about`,
           },
-        ]/*,
+        ],
         externalLinks: [
           {
-            name: `Twitter`,
-            url: `https://twitter.com/lekoarts_de`,
+            name: `GitHub`,
+            url: `https://github.com/jboxman`,
           },
+          {
+            name: `Twitter`,
+            url: `https://twitter.com/JasonBoxman`,
+          }/*,
           {
             name: `Homepage`,
             url: `https://www.lekoarts.de?utm_source=minimal-blog&utm_medium=Starter`,
-          },
-        ],*/
+          },*/
+        ],
       },
     },
     {
