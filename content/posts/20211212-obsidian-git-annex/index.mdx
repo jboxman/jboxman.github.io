@@ -1,0 +1,140 @@
+---
+title: Sync Obsidian content between Macs
+date: 2021-12-12
+#tags: []
+---
+
+If you keep notes for reference as I do, you might be using [Obsidian](https://obsidian.md) for this. Part of what makes Obsidian excellent is its use of Markdown for creating content. Because your data is not stashed away in some proprietary format or relational database, but plain text, that opens up avenues for easily syncing content between computers.
+
+The approach I've adopted uses git and [git-annex](https://git-annex.branchable.com). With git-annex, you can use the _assistant_, a daemon that watches for changes to a git repository and automatically syncs to other git-annex enabled repositories. While the purpose of git-annex is to manage your binary files, it works equally well here.
+
+To configure an Obsidian vault such that it automatically syncs with your other Mac systems, complete the following steps.
+
+## Prerequisites
+
+- `git`
+- `git-annex`, available via `brew install git-annex`
+- Apple's Xcode Developer Tools so that git works
+
+## Initialize and clone the Obsidian vault
+
+1. From a terminal in your Obsidian vault, enter `git init` to initialize the repository.
+1. Create a `.gitignore` file with the following contents:
+
+   ```
+   .obsidian/
+   ```
+
+1. Create a `.gitattributes` file with the following contents. In particular, this ensures that git-annex does not manage your Markdown files as large files, so they continue to be committed to the repository.
+
+   ```
+   * annex.largefiles=(largerthan=50kb) # You can adjust this as necessary
+   *.md annex.largefiles=nothing
+   .gitattributes export-ignore
+   .gitignore export-ignore
+   ```
+
+1. Add all your files to the repository with `git add . && git commit -m 'Initial commit`.
+
+1. Initialize a git-annex repository with `git annex init NAME` where `name` is a descriptive name for this Mac, such as `mbp`. I suggest using the `[A-Za-z0-9-_]` character set only.
+
+1. Disable automatic commits with `git annex config --set annex.autocommit false`. This setting prevents the assistant from adding a new git commit every time that a Markdown file is saved.
+
+1. In a terminal, ssh to your other Mac, or log in to your other Mac and open a new terminal. From there, clone your Obsidian vault repository, such as with `git clone mini:~/repos/example-obsidian`.
+
+1. In the newly cloned repository, enter the following command: `git annex init NAME` where NAME is a uniquely descriptive name for this Mac.
+
+1. Change the name of the origin branch to match the name of the git-annex repository that you just cloned with `git branch -M origin NAME`. Then, confirm the change by entering the following command:
+
+   ```
+   git remote -v
+   mbp  mbp:~/repos/example-obsidian (fetch)
+   mbp  mbp:~/repos/example-obsidian (push)
+   ```
+
+1. Perform the initial git-annex sync, so that each system is aware of the other, with the following command:
+
+   ```
+   git annex sync
+   ```
+
+1. On the first Mac, add the remote for the second Mac so that you can sync from both systems:
+
+   ```
+   git remote add NAME NAME:~/repos/example-obsidian
+   ```
+
+   Replace `NAME` with the name that you provided to `git annex init` previously.
+
+1. On the first Mac, perform a final sync with `git annex sync`.
+
+After the previous procedure is completed, you now have a git repository that contains your Obsidian content, which you've clone onto a second (or additional) Macs. Your repository is initialized to work with git-annex, so the git-annex assistant can automatically sync any changes that you make to your vault to other Macs in near realtime.
+
+## Configure automatic sync with the git-annex assistant
+
+1. Specify the git-annex repositories that you want the assistant to sync automatically in `~/.config/git-annex/autostart`, one per line. For example:
+
+   ```
+   /Users/user1/repos/my-obsidian-vault
+   ```
+
+1. To configure a launch agent for the git-annex assistant, configure the following `~/Library/LaunchAgents/com.example.gitannexassistant.plist` file:
+
+```xml
+   <?xml version="1.0" encoding="UTF-8"?>
+   <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+   <plist version="1.0">
+   <dict>
+     <key>Label</key>
+     <string>com.example.gitannexassistant</string>
+
+     <key>ProgramArguments</key>
+     <array>
+       <string>/usr/local/bin/git-annex</string>
+       <string>assistant</string>
+       <string>--autostart</string>
+     </array>
+
+     <key>EnvironmentVariables</key>
+     <dict>
+       <key>PATH</key>
+       <string>/bin:/sbin:/usr/bin:/usr/sbin:/usr/local/bin</string>
+     </dict>
+
+     <key>WorkingDirectory</key>
+     <string>/Users/jasonb/Self/repos</string>
+
+     <key>Nice</key>
+     <integer>1</integer>
+
+     <key>RunAtLoad</key>
+     <true/>
+
+     <key>StandardErrorPath</key>
+     <string>/tmp/gitannexassistant.err</string>
+
+     <key>StandardOutPath</key>
+     <string>/tmp/gitannexassistant.out</string>
+   </dict>
+   </plist>
+```
+
+1. To launch the git-annex assistant, enter the following command:
+
+   ```
+   launchctl start com.example.gitannexassistant
+   ```
+
+1. To confirm that the agent launched successfully, enter the following command:
+
+   ```
+   cat /tmp/gitannexassistant.out
+   git-annex autostart in /Users/user1/repos/my-obsidian-vault
+   ok
+   ```
+
+After this is configure, if you make and commit a change to your repository on one system, short after you can confirm with `git log` that your changes propagated to your other Macs:
+
+```
+commit bf9xxxx5e9b56f277xx72533e67c002400xx744c (HEAD -> master, origin/synced/master, origin/master, origin/HEAD, synced/master)
+```
