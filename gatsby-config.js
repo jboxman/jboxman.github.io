@@ -10,11 +10,11 @@ module.exports = {
     // You can overwrite values here that are used for the SEO component
     // You can also add new values here to query them like usual
     // See all options: https://github.com/LekoArts/gatsby-themes/blob/main/themes/gatsby-theme-minimal-blog/gatsby-config.js
-    siteTitle: `Learning through failure`,
-    siteTitleAlt: `Learning through failure`,
-    siteHeadline: `Learning through failure`,
+    siteTitle: `Yet another developer blog`,
+    siteTitleAlt: `Developer blog`,
+    siteHeadline: `Yet another developer blog`,
     siteUrl: `http://edseek.com`,
-    siteDescription: ``,
+    siteDescription: `Posts about JavaScript, automation, Kubernetes, and containers`,
     siteImage: `/banner.jpg`,
     author: `@JasonBoxman`,
   },
