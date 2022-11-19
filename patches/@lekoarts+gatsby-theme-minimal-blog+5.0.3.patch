@@ -1,0 +1,13 @@
+diff --git a/node_modules/@lekoarts/gatsby-theme-minimal-blog/src/components/footer.tsx b/node_modules/@lekoarts/gatsby-theme-minimal-blog/src/components/footer.tsx
+index bbb026a..2830306 100755
+--- a/node_modules/@lekoarts/gatsby-theme-minimal-blog/src/components/footer.tsx
++++ b/node_modules/@lekoarts/gatsby-theme-minimal-blog/src/components/footer.tsx
+@@ -21,7 +21,7 @@ const Footer = () => {
+       }}
+     >
+       <div>
+-        &copy; {new Date().getFullYear()} by {siteTitle}. All rights reserved.
++        &copy; {new Date().getFullYear()} by Jason Boxman. All rights reserved.
+       </div>
+       <div>
+         <Link
