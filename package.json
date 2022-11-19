@@ -14,7 +14,8 @@
     "build:cypress": "cross-env CYPRESS_SUPPORT=y yarn build",
     "start": "gatsby develop",
     "serve": "gatsby serve",
-    "clean": "gatsby clean"
+    "clean": "gatsby clean",
+    "postinstall": "patch-package"
   },
   "dependencies": {
     "@lekoarts/gatsby-theme-minimal-blog": "^5.0.0",
@@ -32,6 +33,7 @@
   },
   "devDependencies": {
     "cross-env": "^7.0.3",
-    "gh-pages": "^4.0.0"
+    "gh-pages": "^4.0.0",
+    "patch-package": "^6.5.0"
   }
 }
