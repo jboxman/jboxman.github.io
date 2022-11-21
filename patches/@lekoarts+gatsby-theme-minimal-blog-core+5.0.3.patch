@@ -1,0 +1,13 @@
+diff --git a/node_modules/@lekoarts/gatsby-theme-minimal-blog-core/gatsby-node.js b/node_modules/@lekoarts/gatsby-theme-minimal-blog-core/gatsby-node.js
+index f037779..68497a2 100755
+--- a/node_modules/@lekoarts/gatsby-theme-minimal-blog-core/gatsby-node.js
++++ b/node_modules/@lekoarts/gatsby-theme-minimal-blog-core/gatsby-node.js
+@@ -341,7 +341,7 @@ exports.createPages = async ({ actions, graphql, reporter }, themeOptions) => {
+ 
+   posts.forEach((post) => {
+     createPage({
+-      path: post.slug,
++      path: `/${basePath}/${blogPath}/${post.slug}`.replace(/\/\/+/g, `/`),
+       component: `${postTemplate}?__contentFilePath=${post.contentFilePath}`,
+       context: {
+         slug: post.slug,
