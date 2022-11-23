@@ -1,0 +1,92 @@
+---
+title: 
+date: 2022-04-01
+#tags: []
+---
+
+```yaml
+commands:
+- name: grep
+- description: |-
+    This is a command.
+
+    {{#on 'linux'}}
+    {{/on}}
+    {{#on 'macos'}}
+    {{/on}}
+```
+
+```js
+const Handlebars = require('handlebars');
+
+Handlebars.registerHelper(fullFnName, helpers[name](config));
+
+  const page = await compileTemplate({templateName});
+  await registerPartials();
+
+  // the template string
+  page = this.compile(page);
+
+  const data = page({
+    targetProduct: toUpper(config.product),
+    releaseVersion: config.version
+  });
+
+```
+
+```js
+const createRenderDescription = config => function(options) {
+  //const raw = options.fn(this);
+  const raw = this.description;
+  if(!raw) return;
+
+  const { parentProps: { connectorFileName: connector, connectorName, properties } } = options.hash;
+
+  const { os } = config;
+
+  const hbs = Handlebars.create();
+
+  // for connector config file name
+  hbs.registerHelper('for', function(connectorName, options) {
+    const raw = options.fn(this);
+    if(!connectorName) return '';
+    if(!raw) return '';
+
+    if(connectorName == connector) {
+      return new Handlebars.SafeString(raw);
+    }
+
+    return '';
+  });
+  // on 'cloud' or on 'platform
+  hbs.registerHelper('on', function(os, options) {
+    const raw = options.fn(this);
+    if(!product) return '';
+    if(!raw) return '';
+
+    if(product == this.product) {
+      return new Handlebars.SafeString(raw);
+    }
+
+    return '';
+  });
+
+  const tmpl = hbs.compile(raw, { strict: true });
+
+  const str = tmpl({
+    siblings: properties.reduce((obj, prop) => {
+      if(prop.hasOwnProperty('propertyName') && prop.propertyName) {
+        obj[prop.propertyName] = { ...prop };
+      }
+      return obj;
+    }, {}),
+    connectorName,
+    connector,
+    product,
+    vars,
+    self: { ...this }
+  });
+
+  return new Handlebars.SafeString(output);
+};
+```
