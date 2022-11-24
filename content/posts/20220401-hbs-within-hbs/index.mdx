@@ -1,8 +1,19 @@
 ---
-title: 
+title: Use a Handlebars template inside your Handlebars template
 date: 2022-04-01
 #tags: []
 ---
+
+As a general purpose template language, Handlebars is useful for situations that do not require a domain specific approach.
+
+```hbs
+# Useful commands
+{{#each commands}}
+## {{name}}
+
+{{renderDescription}}
+{{/each}}
+```
 
 ```yaml
 commands:
@@ -18,19 +29,22 @@ commands:
 
 ```js
 const Handlebars = require('handlebars');
+const fs = require('fs').promises;
+const yaml = require('js-yaml');
 
-Handlebars.registerHelper(fullFnName, helpers[name](config));
+Handlebars.registerHelper('renderDescription', createRenderDescription(config));
+const config = yaml.load(await fs.readFile(file, { encoding: 'utf8' }));
 
-  const page = await compileTemplate({templateName});
-  await registerPartials();
+page = await fs.readFile(path.join(pagesDir, `${templateName}.hbs`), opts);
+const page = await compileTemplate('tmpl.hbs');
 
-  // the template string
-  page = this.compile(page);
+// the template string
+page = this.compile(page);
 
-  const data = page({
-    targetProduct: toUpper(config.product),
-    releaseVersion: config.version
-  });
+const data = page({
+  targetProduct: toUpper(config.product),
+  releaseVersion: config.version
+});
 
 ```
 
