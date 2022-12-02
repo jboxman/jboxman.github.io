@@ -1,0 +1,82 @@
+---
+title: Accept input on STDIN without blocking
+date: 2022-11-29
+#tags: []
+---
+
+```
+find . -type f -name '*.adoc' | asciidoc-validate-yaml --stdin
+```
+
+```js
+// https://humanwhocodes.com/snippets/2019/05/nodejs-read-stream-promise/
+function readStream(stream, encoding = "utf8", timeout = 10) {
+
+  stream.setEncoding(encoding);
+
+  return new Promise((resolve, reject) => {
+    let data = "";
+    // https://stackoverflow.com/a/53347693
+    const abort = setTimeout(onTimeout, timeout);
+
+    function onData(chunk) { data += chunk; }
+    function onError(error) { reject(error); }
+    // Never called if STDIN never receives EOF
+    function onEnd() { clearTimeout(abort); resolve(data.split(/\n/)); }
+
+    function onTimeout() {
+      stream.removeListener('data', onData);
+      stream.removeListener('end', onEnd)
+      stream.removeListener('error', onError);
+      resolve(false);
+    };
+
+    stream.on("data", onData);
+    stream.on("end", onEnd);
+    stream.on("error", onError);
+  });
+}
+```
+
+```
+const program = require('commander');
+const mainAction = require('./action');
+
+async function cli() {
+  program
+  .description('Validate YAML listing blocks in Asciidoc files')
+  .option('--stdin', 'Read file list from stdin instead of _topic_map.yml',
+  .action(mainAction);
+
+  if(process.argv.length <= 2) {
+    program.outputHelp();
+    process.exitCode = 1;
+  }
+  else {
+    await program.parseAsync(process.argv);
+  }
+}
+
+module.exports = cli;
+```
+
+```js
+async function main(options = {}, cmd = {}) {
+  let data;
+  let failed = false;
+  const { pass: alwaysPass, stdin: useStdin } = options;
+  const topicPath = options.topic ? options.topic : fsPath.join(process.cwd(), '_topic_map.yml');
+  const attributes = parseAttributes(options.attributes);
+
+  //console.log(pairAttributes(attributes));
+
+  if(useStdin) {
+    data = await readStream(process.stdin);
+    if(!data) {
+      console.log('No input on stdin');
+      return process.exitCode = 1;
+    }
+  }
+```
+
+For the complete code, see https://github.com/jboxman/asciidoc-validate-yaml.
