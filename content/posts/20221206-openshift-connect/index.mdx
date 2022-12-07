@@ -1,0 +1,318 @@
+---
+title: Troubleshoot app connectivity on OpenShift
+date: 2022-12-06
+tags:
+- OpenShift
+- Kubernetes
+---
+
+Once your app is ready, you excitedly deploy it to your favorite Kubernetes cluster, such as [Red Hat OpenShift](https://www.redhat.com/en/technologies/cloud-computing/openshift). Inputting the URL into the browser, you hit enter and are greeted with...
+
+> Application is not available
+
+> The application is currently not serving requests at this endpoint. It may not have been started or is still starting.
+
+Well, that's a disappointment!
+
+Fortunately, there are some steps that we can take to determine why your app isn't available to the world.
+
+This post makes a few assumptions about your app's deployment. In particular:
+
+- You deployed to a Red Hat OpenShift cluster (although this is mostly applicable to any Kubernetes cluster)
+- You created a [service resource](https://kubernetes.io/docs/concepts/services-networking/service/)
+- You created a [route resource](https://docs.openshift.com/container-platform/4.11/networking/routes/route-configuration.html), which is specific to OpenShift and provides ingress for HTTP traffic
+- You are not using any [network policies](https://kubernetes.io/docs/concepts/services-networking/network-policies/) within your project
+
+## Our app deployment
+
+By way of example, let's troubleshoot the [OpenShift Hello app](https://github.com/openshift/origin/blob/master/examples/hello-openshift/README.md), deployed with the following manifest. The key aspects of this manifest are as follows:
+
+- A deployment that creates two pods that we can load balance traffic between
+- A service that manages our service endpoints, the two pods the deployment creates
+- A route that load balances incoming HTTP requests to our service endpoints
+
+It is essential that the TCP ports are specified correctly. The app uses `8080` for HTTP traffic.
+
+```yaml title='App deployment configuration' highlight=21-23,35-37,47-49
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: openshift-hello
+  labels:
+    app: ocp
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: ocp
+  template:
+    metadata:
+      labels:
+        app: ocp
+    spec:
+      containers:
+      - name: openshift-hello
+        image: openshift/hello-openshift:latest
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 8080
+          protocol: TCP
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: openshift-hello-svc
+  labels:
+    app: ocp
+spec:
+  selector:
+    app: ocp
+  ports:
+  - port: 8080
+    protocol: TCP
+    targetPort: 8080
+  type: ClusterIP
+---
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: hello-openshift
+  labels:
+    app: ocp
+spec:
+  host: openshift-hello.apps-crc.testing
+  port:
+    targetPort: 8080
+  tls:
+    termination: edge
+  to:
+    kind: Service
+    name: openshift-hello-svc
+    weight: 100
+  wildcardPolicy: None
+```
+
+And once executed, we see the following resources in our project:
+
+```none title='Output'
+$ oc get all -o wide
+NAME                                   READY   STATUS    RESTARTS   AGE   IP             NODE                 NOMINATED NODE   READINESS GATES
+pod/openshift-hello-589f9c7749-rhb2p   1/1     Running   0          11h   10.217.0.232   crc-lgph7-master-0   <none>           <none>
+pod/openshift-hello-589f9c7749-wbn9l   1/1     Running   0          11h   10.217.0.236   crc-lgph7-master-0   <none>           <none>
+
+NAME                          TYPE        CLUSTER-IP    EXTERNAL-IP   PORT(S)    AGE   SELECTOR
+service/openshift-hello-svc   ClusterIP   10.217.5.72   <none>        8080/TCP   11h   app=ocp
+
+NAME                              READY   UP-TO-DATE   AVAILABLE   AGE   CONTAINERS        IMAGES                             SELECTOR
+deployment.apps/openshift-hello   2/2     2            2           11h   openshift-hello   openshift/hello-openshift:latest   app=ocp
+
+NAME                                         DESIRED   CURRENT   READY   AGE   CONTAINERS        IMAGES                             SELECTOR
+replicaset.apps/openshift-hello-589f9c7749   2         2         2       11h   openshift-hello   openshift/hello-openshift:latest   app=ocp,pod-template-hash=589f9c7749
+
+NAME                                       HOST/PORT                          PATH   SERVICES              PORT   TERMINATION   WILDCARD
+route.route.openshift.io/hello-openshift   openshift-hello.apps-crc.testing          openshift-hello-svc   8080   edge          None
+```
+
+## Our troubleshooting steps
+
+Given the deployment described in the previous section, now we can dive into troubleshooting. We want to check for connectivity issues between each resource. In particular, we're going to look whether the app responds to an HTTP request.
+
+We're going to answer the following questions:
+
+- Did the app start successfully?
+- Can I connect to an app pod through a port forward?
+- Can I connect to the service?
+- Can I connect to the route?
+
+In all cases, `oc` commands are executed within the `hello-openshift` namespace.
+
+### Did the app start successfully?
+
+For this, let's look at the logs for our app pods:
+
+```none title='Output'
+$ oc get pods -l app=ocp \
+  -o jsonpath='{range .items[*]}pods/{.metadata.name}{"\n"}{end}' | \
+  xargs -L1 -I% bash -c 'echo % && oc logs %'
+pods/openshift-hello-589f9c7749-rhb2p
+serving on 8888
+serving on 8080
+Servicing request.
+Servicing request.
+Servicing request.
+Servicing request.
+Servicing request.
+pods/openshift-hello-589f9c7749-wbn9l
+serving on 8888
+serving on 8080
+Servicing request.
+```
+
+If the app log includes any errors, these are worth investigating further.
+
+### Can I connect to an app pod through a port forward?
+
+For this, we can setup a port forward to an app pod and attempt to connect directly to the application, bypassing our ingress configuration.
+
+```
+$ oc port-forward pods/openshift-hello-589f9c7749-rhb2p 8080
+Forwarding from 127.0.0.1:8080 -> 8080
+Forwarding from [::1]:8080 -> 8080
+```
+
+With the forward successfully running, in a different terminal window, use the `curl` command to test connectivity. (In this example, we're using an `http://` URL because our app does not use TLS. Instead, we rely on the OpenShift ingress controller to manage TLS encryption at the *edge*. This configuration is referred to as edge terminated.)
+
+```none title='Output'
+$ curl -v http://localhost:8080/
+*   Trying 127.0.0.1:8080...
+* Connected to localhost (127.0.0.1) port 8080 (#0)
+> GET / HTTP/1.1
+> Host: localhost:8080
+> User-Agent: curl/7.79.1
+> Accept: */*
+>
+* Mark bundle as not supporting multiuse
+< HTTP/1.1 200 OK
+< Date: Wed, 07 Dec 2022 23:17:43 GMT
+< Content-Length: 17
+< Content-Type: text/plain; charset=utf-8
+<
+Hello OpenShift!
+* Connection #0 to host localhost left intact
+```
+
+And our app is reachable through the port forward.
+
+### Can I connect to the service?
+
+Because our original manifest created a service for this, each app pod with the label `app=ocp` is included as an endpoint for the `openshift-hello-svc` service.
+
+By describing the service, we learn its endpoints: `10.217.0.232:8080` and `10.217.0.236:8080`. And these endpoints match the IP addresses for our app pods.
+
+```none title='Output'  highlight=14
+$ oc describe services/openshift-hello-svc
+Name:              openshift-hello-svc
+Namespace:         hello-openshift
+Labels:            app=ocp
+Annotations:       <none>
+Selector:          app=ocp
+Type:              ClusterIP
+IP Family Policy:  SingleStack
+IP Families:       IPv4
+IP:                10.217.5.72
+IPs:               10.217.5.72
+Port:              <unset>  8080/TCP
+TargetPort:        8080/TCP
+Endpoints:         10.217.0.232:8080,10.217.0.236:8080
+Session Affinity:  None
+Events:            <none>
+```
+
+Or we can look at the endpoint resources in the project. The IP addresses and ports match our `openshift-hello-svc` service:
+
+```none title='Output'
+$ oc get endpoints
+NAME                  ENDPOINTS                             AGE
+openshift-hello-svc   10.217.0.232:8080,10.217.0.236:8080   12h
+```
+
+For this connection test, let's use a [Netshoot](https://github.com/nicolaka/netshoot) container.
+
+```none title='Output'
+kubectl run tmp-shell --rm -i --tty --image nicolaka/netshoot
+
+                    dP            dP                           dP   
+                    88            88                           88   
+88d888b. .d8888b. d8888P .d8888b. 88d888b. .d8888b. .d8888b. d8888P 
+88'  `88 88ooood8   88   Y8ooooo. 88'  `88 88'  `88 88'  `88   88   
+88    88 88.  ...   88         88 88    88 88.  .88 88.  .88   88   
+dP    dP `88888P'   dP   `88888P' dP    dP `88888P' `88888P'   dP   
+                                                                    
+Welcome to Netshoot! (github.com/nicolaka/netshoot)
+```
+
+From the Netshoot container, let's confirm that we can access the cluster IP of the service, which internally routes the traffic to one of our app pods.
+
+```none title='Output'
+$ curl -v http://10.217.5.72:8080/ 
+*   Trying 10.217.5.72:8080...
+* Connected to 10.217.5.72 (10.217.5.72) port 8080 (#0)
+> GET / HTTP/1.1
+> Host: 10.217.5.72:8080
+> User-Agent: curl/7.86.0
+> Accept: */*
+> 
+* Mark bundle as not supporting multiuse
+< HTTP/1.1 200 OK
+< Date: Fri, 09 Dec 2022 03:39:28 GMT
+< Content-Length: 17
+< Content-Type: text/plain; charset=utf-8
+< 
+Hello OpenShift!
+* Connection #0 to host 10.217.5.72 left intact
+#
+```
+
+Exit the shell to terminate the Netshoot pod.
+
+### Can I connect to the route?
+
+Finally, let's check whether we can connect to the exposed public route of our app. We can describe the route and confirm what the hostname for our app is: `openshift-hello.apps-crc.testing`.
+
+```none title='Output' highlight=7-8
+$ oc describe routes/hello-openshift
+Name:			hello-openshift
+Namespace:		hello-openshift
+Created:		20 hours ago
+Labels:			app=ocp
+...
+Requested Host:		openshift-hello.apps-crc.testing
+			   exposed on router default (host router-default.apps-crc.testing) 20 hours ago
+Path:			<none>
+TLS Termination:	edge
+Insecure Policy:	<none>
+Endpoint Port:		8080
+
+Service:	openshift-hello-svc
+Weight:		100 (100%)
+Endpoints:	10.217.0.232:8080, 10.217.0.236:8080
+```
+
+In a browser, we can visit https://openshift-hello.apps-crc.testing/ to see if the app loads. Behind the scenes, the ingress controller is handling the TLS termination and load balancing across app endpoints.
+
+If we cannot connect successfully, on OpenShift it's [possible to enable logging](https://stackoverflow.com/a/66563562) on the ingress controller to investigate further.
+
+As a cluster administrator, edit the ingress controller configuration:
+
+```none title='Output'
+$ oc -n openshift-ingress-operator edit ingresscontrollers/default
+```
+
+Add the `spec.logging.access.*` fields as described in the following YAML:
+
+```yaml title='Ingress controller logging configuration'
+apiVersion: operator.openshift.io/v1
+kind: IngressController
+metadata:
+  name: default
+  namespace: openshift-ingress-operator
+spec:  
+  logging:
+    access:
+      destination:
+        type: Container
+      httpLogFormat: log_source="haproxy-default" log_type="http" c_ip="%ci" c_port="%cp" req_date="%tr" fe_name_transport="%ft" be_name="%b" server_name="%s" res_time="%TR" tot_wait_q="%Tw" Tc="%Tc" Tr="%Tr" Ta="%Ta" status_code="%ST" bytes_read="%B" bytes_uploaded="%U" captrd_req_cookie="%CC" captrd_res_cookie="%CS" term_state="%tsc" actconn="%ac" feconn="%fc" beconn="%bc" srv_conn="%sc" retries="%rc" srv_queue="%sq" backend_queue="%bq" captrd_req_headers="%hr" captrd_res_headers="%hs" http_request="%r"
+      logEmptyRequests: Log
+```
+
+After updating the ingress controller configuration, you can tail the haproxy logs on a router pod. To list the available router pods, run the `oc get -n openshift-ingress pods` command.
+
+```none title='Output'
+$ oc logs -f -n openshift-ingress router-default-<id> log
+```
+
+Ideally, if your app is accessible on the pods that it is running on and through the service, the problem lies with the ingress configuration. Troubleshooting issues with ingress is beyond the scope of this post.
+
+For more information on the OpenShift Ingress Operator, see the [official documentation](https://docs.openshift.com/container-platform/4.11/networking/ingress-operator.html).
+
+While in these examples, the app is reachable at every step, you can use this approach to reveal whether a connectivity issue prevents you from connecting to your app successfully from your exposed route if you are facing an _Application is not available_ error page.
