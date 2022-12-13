@@ -11,7 +11,7 @@ module.exports = {
     // You can also add new values here to query them like usual
     // See all options: https://github.com/LekoArts/gatsby-themes/blob/main/themes/gatsby-theme-minimal-blog/gatsby-config.js
     siteTitle: `Yet another developer blog`,
-    siteTitleAlt: `Developer blog`,
+    siteTitleAlt: `Yet another developer blog`,
     siteHeadline: `Yet another developer blog`,
     siteUrl: `http://edseek.com`,
     siteDescription: `Posts about JavaScript, automation, Kubernetes, and containers`,
