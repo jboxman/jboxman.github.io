@@ -1,0 +1,65 @@
+---
+title: Add an unread mail count badge to Gmail
+date: 2022-12-20
+tags:
+- JavaScript
+---
+
+If you're a Gmail user, but want a native app like experience, you might be using the _Create shortcut..._ feature available in Chrome and Chrome-based browsers, such as [Vivaldi](https://vivaldi.com/download/). This feature opens a specific URL, such as `https://gmail.com/`, in a dedicated browser window and provides a separate icon on the dock (MacOS) or taskbar (Windows). But by default there's no badge counter for unread emails.
+
+Fortunately, it is possible to add a badge by using the experimental [`Navigator.setAppBadge()` API](https://developer.mozilla.org/en-US/docs/Web/API/Navigator/setAppBadge). This experimental API is available only in Chrome as of this writing. Here I am going to combine the badge API with [Violentmonkey](https://violentmonkey.github.io/get-it/), a browser extension that uses the [WebExtension](https://developer.mozilla.org/en-US/docs/Mozilla/Add-ons/WebExtensions) APIs.
+
+If you want to use the script, it is available from a [GitHub repository](https://github.com/jboxman/gmail-badge) in the `gmail-badge/dist/index.user.js` file.
+
+Most of the work is performed by a [MutationObserver](https://developer.mozilla.org/en-US/docs/Web/API/MutationObserver). The API is wrapped by `VM.observe` for convenience, and so we only need to provide a DOM element to monitor for mutations and a callback function:
+
+```js title='Mutation callback function'
+import * as VM from '@violentmonkey/dom';
+
+VM.observe(document.head, () => {
+  const $el = document.querySelector('title');
+  // https://github.com/developit/Gmail-unread-count-badge/blob/main/src/content.js
+  let m = String($el.innerText).match(/Inbox(?: \((\d+)\))? -/);
+  if (m) navigator.setAppBadge(m[1] | 0 || null);
+});
+```
+
+In the preceding code, we do the following:
+
+- Observe the `<head>` DOM element for any changes.
+- React to a change by querying the `<title>` DOM element, extracting the unread message count, and calling `navigator.setAppBadge` to set the badge number.
+
+By using a MutationObserver, we ensure that whenever Google updates the unread message count in the page title, we can update our unread messages icon badge.
+
+For reference, `VM.observe` wraps the `MutationObserver.observe` method in the [following way](https://github.com/violentmonkey/vm-dom):
+
+```ts title='VM.observe() function'
+export function observe(
+  node: Node,
+  callback: (
+    mutations: MutationRecord[],
+    observer: MutationObserver
+  ) => boolean | void,
+  options?: MutationObserverInit
+): () => void {
+  const observer = new MutationObserver((mutations, ob) => {
+    const result = callback(mutations, ob);
+    if (result) disconnect();
+  });
+  observer.observe(
+    node,
+    Object.assign(
+      {
+        childList: true,
+        subtree: true,
+      },
+      options
+    )
+  );
+  const disconnect = () => observer.disconnect();
+  return disconnect;
+}
+```
+
+The [source is available on GitHub](https://github.com/jboxman/gmail-badge
+) and the userscript lives at: `gmail-badge/dist/index.user.js`.
