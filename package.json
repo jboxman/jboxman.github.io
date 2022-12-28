@@ -18,8 +18,11 @@
     "postinstall": "patch-package"
   },
   "dependencies": {
+    "@fortawesome/fontawesome-svg-core": "^6.2.1",
+    "@fortawesome/free-regular-svg-icons": "^6.2.1",
+    "@fortawesome/free-solid-svg-icons": "^6.2.1",
+    "@fortawesome/react-fontawesome": "^0.2.0",
     "@lekoarts/gatsby-theme-minimal-blog": "^5.0.0",
-    "@react-icons/all-files": "^4.1.0",
     "gatsby": "^4.24.6",
     "gatsby-plugin-feed": "^4.24.0",
     "gatsby-plugin-google-gtag": "^4.24.0",
