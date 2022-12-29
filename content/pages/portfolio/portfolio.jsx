@@ -85,7 +85,7 @@ export default function Portfolio() {
           <li>Works with AsciiDoc attributes and conditional statements.</li>
           <li>Supports passing in custom AsciiDoc attributes.</li>
           <li>CSV output mode for cataloging broken links for large numbers of files.</li>
-          <li>Reads Asciidoc file names from stdin to support piping input from <code>find</code>.</li>
+          <li>Reads AsciiDoc file names from stdin to support piping input from <code>find</code>.</li>
         </ul>
       </Card>
     </>
