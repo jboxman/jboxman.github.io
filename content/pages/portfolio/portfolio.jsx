@@ -72,11 +72,28 @@ export default function Portfolio() {
         <li>Bookmark any API's schema page for quick reference.</li>
         </ul>
       </Card>
+
+      <Card
+        title='OpenShift API docs generator'
+        repoUrl='https://github.com/jboxman/openshift-apidocs-gen'
+        imageName='openshift-apidocs-gen'
+        stack={['JavaScript', 'Node.js', 'Handlebars', 'Commander.js']}
+      >
+        <p>
+        Generates static documentation for the OpenShift OpenAPI specification suitable for inclusion in product documentation. Used to built the OpenShift API reference documentation for each OpenShift release.
+        </p>
+        <ul>
+          <li>Parses OpenAPI v2 specification for cluster APIs.</li>
+          <li>Outputs AsciiDoc files with API endpoints and schemas per API.</li>
+          <li>Supports customized grouping of APIs in documentation output.</li>
+        </ul>
+      </Card>
+
       <Card
         title='asciidoc-aware-link-check'
         repoUrl='https://github.com/jboxman/asciidoc-aware-link-check'
         imageName='asciidoc-aware-link-check'
-        stack={['JavaScript', 'Node.js', 'Asciidoctor.js']}
+        stack={['JavaScript', 'Node.js', 'Asciidoctor.js', 'Commander.js']}
       >
         <p>
           Check URLs in AsciiDoc files.

@@ -60,3 +60,16 @@
   background-color: bisque;
   border-radius: 5px;
 }
+
+@media only screen and (max-width:999px) {
+  .portfolio > div {
+    flex-direction: column-reverse;
+  }
+  .portfolio img {
+    width: 100%;
+    max-width: 500px;
+  }
+  .portfolio.right ul.tech-stack {
+    flex-direction: column;
+  }
+}
