@@ -100,7 +100,7 @@ After the previous procedure is completed, you now have a git repository that co
      <key>EnvironmentVariables</key>
      <dict>
        <key>PATH</key>
-       <string>/bin:/sbin:/usr/bin:/usr/sbin:/usr/local/bin</string>
+       <string>/usr/local/bin:/bin:/sbin:/usr/bin:/usr/sbin</string>
      </dict>
 
      <key>WorkingDirectory</key>
@@ -110,6 +110,9 @@ After the previous procedure is completed, you now have a git repository that co
      <integer>1</integer>
 
      <key>RunAtLoad</key>
+     <true/>
+
+     <key>KeepAlive</key>
      <true/>
 
      <key>StandardErrorPath</key>
