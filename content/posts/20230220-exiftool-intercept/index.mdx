@@ -1,0 +1,103 @@
+---
+title: Intercept the exiftool interactive API
+date: 2023-02-20
+tags:
+- JavaScript
+---
+
+A popular and extraordinarily thorough program for reading and writing image metadata, [exiftool](https://exiftool.org/) supports an interactive mode that accepts commands through stdin. This mode is useful for batching commands without the overhead of spawning a new Perl process for each command.
+
+The [digiKam](https://www.digikam.org/), a cross platform image management and editing application, uses exiftool as one of its metadata providers, and in the beta of version 8, also supports using exiftool for writing image metadata.
+
+For a project that I'm working on, I wanted to log an interactive session between digiKam and exiftool. This can be accomplished without modifying either the digiKam or the exiftool source code, by introducing an additional program that sits in between, taking input on stdin, logging it, and passing it along to exiftool. As replies come back from exiftool, these too are logged, and then passed along to digiKam.
+
+To achieve the effect, we need to introduce a bidirectional conduit. With [Node.js](https://nodejs.org/).js, we can do this with a combination of the `node:readline` and `node:child_process` modules:
+
+```javascript title='Require modules'
+const readline = require('node:readline');
+const { spawn } = require('node:child_process');
+```
+
+First, we need to capture data from stdin. This input is line oriented, and therefore `node:readline` ([docs](https://nodejs.org/api/readline.html)) makes this easy to work with. We are exclusively interested in `input`. For simplicity, I am using the callback API.
+
+```javascript title='Configure node:readline'
+  const rl = readline.createInterface({
+    input: process.stdin,
+    output: null,
+  });
+```
+
+Now we can spawn `exiftool` as a child process, and wire up its stdin, stdout, and stderr:
+
+```javascript title='Configure sub process spawn'
+  const exiftool = spawn(exiftoolPath, args, {
+    stdio: ['pipe', 'pipe', 'pipe'],
+  });
+```
+
+The `stdio` key accepts an array of file descriptors, and these correspond to `stdin`, `stdout`, and `stderr`. We want access to all three steams, so we specify `pipe` for each.
+
+Last, we want to wire up our events, so that we can log and pass data to and from the child `exiftool` process:
+
+```javascript title='Log and redirect output' highlight=9,10,12,13,17,18
+  // `fs` module required, and `logPath` defined elsewhere
+  const logAndWriteTo =
+    (handle = 'stdout') =>
+    (s) => {
+      fs.appendFileSync(logPath, `${s}`);
+      process[handle].write(s);
+    };
+
+  exiftool.on('spawn', () => { // <1>
+    rl.on('line', (cmd) => { // <2>
+      fs.appendFileSync(logPath, `${cmd}\n`);
+      exiftool.stdin.write(cmd); // <3>
+      exiftool.stdin.write(EOL); // <3>
+    });
+  });
+
+  exiftool.stdout.on('data', (s) => logAndWriteTo('stdout')(s)); // <4>
+  exiftool.stderr.on('data', (s) => logAndWriteTo('stderr')(s)); // <4>
+```
+
+In the above code snippet, we setup the following:
+
+1. Setup an event handler that runs after the `exiftool` binary successfully runs.
+2. Setup an event handler for `stdin` where we log incoming commands to exiftool.
+3. Forward each command to the child process. We  make use of the `eol` npm module to send a proper line ending, as readline removes this.
+4. We add an event handler on each of `exiftool.stdout` and `exiftool.stderr` to capture, and forward, output from the child process.
+
+It's important to note that, the end of line termination sequence might not be a newline. Because exiftool uses a newline, this implementation is quite straightforward. But nulls or some other sequence is possible in the wild.
+
+The following is output from the interceptor script:
+
+```
+-stay_open,true,-@,-,-common_args,-charset,filename=UTF8,-charset,iptc=UTF8
+-json
+-G:0:1:2:4:6
+-l
+/path/to/a/file/20140220-103514.jpg
+-echo1
+{await0000000001}
+-echo2
+{await0000000001}
+-echo4
+{ready}
+-execute
+{await0000000001}
+{await0000000001}
+[{
+  "SourceFile"...
+...
+{ready}
+-stay_open
+false
+```
+
+To use this in practice, it is crucial that digiKam can actually execute the script, which is prefaced with `#!/usr/bin/env node` and therefore `node` must be in one of the paths in the `PATH` environment variable.
+
+By default, [digiKam searches](https://doc.qt.io/qt-5/qstandardpaths.html#findExecutable) your `PATH` environment variable find the `exiftool` binary. However, your login shell `PATH` variable might not be the same as the `PATH` variable that digiKam starts with. For example, on OS X, the environment of the `launchd` process is the one that digiKam starts with.
+
+On OS X, you can start digiKam with your shell's environment by running `open /Applications/digiKam.org/digikam.app`.
+
+The complete code is available from the [exiftool-intercept](https://github.com/jboxman/exiftool-intercept) repo on GitHub.
