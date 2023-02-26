@@ -1,0 +1,131 @@
+---
+title: Use Prisma with an SQLite DATETIME datatype
+date: 2023-02-24
+tags:
+- JavaScript
+---
+
+tl;dr - For a `DATETIME` datatype in SQLite, Prisma reads and writes a Unix epoch time in milliseconds. Depending on your schema, you might be able to read an RFC 3339 or RFC 2822 formatted date from a `TEXT` datatype, if the Prisma schema defines the field as `DateTime`.
+
+## SQLite and the DATETIME datatype
+
+Per the [SQLite documentation](https://sqlite.org/quirks.html#no_separate_datetime_datatype), it does not have a distinct data type for `DATETIME`:
+
+> SQLite has no `DATETIME` datatype. Instead, dates and times can be stored in any of these ways:
+>
+> - As a TEXT string in the ISO-8601 format. Example: '2018-04-02 12:13:46'.
+> - As an INTEGER number of seconds since 1970 (also known as "unix time").
+> - As a REAL value that is the fractional Julian day number.
+>
+> The built-in date and time functions of SQLite understand date/times in all of the formats above, and can freely change between them. Which format you use, is entirely up to your application.
+
+To account for this, Prisma reads and writes the NUMERIC datatype for its [DateTime support](https://www.prisma.io/docs/reference/api-reference/prisma-schema-reference#datetime).
+
+Prisma also supports an SQLite `TEXT` datatype, however the format must be in either the RFC 3339 or RFC 2822 formats, which SQLite does not support, instead favoring ISO-8601.
+
+As it happens, [ISO-8601 is substantially similar to, but not identical to RFC 3339](https://stackoverflow.com/questions/522251/whats-the-difference-between-iso-8601-and-rfc-3339-date-formats):
+
+> Pretty much, yes - RFC 3339 is listed as a profile of ISO 8601. Most notably RFC 3339 specifies a complete representation of date and time (only fractional seconds are optional). The RFC also has some small, subtle differences. For example truncated representations of years with only two digits are not allowed -- RFC 3339 requires 4-digit years, and the RFC only allows a period character to be used as the decimal point for fractional seconds. The RFC also allows the "T" to be replaced by a space (or other character), while the standard only allows it to be omitted (and only when there is agreement between all parties using the representation).
+
+While there's a [Prisma issue](https://github.com/prisma/prisma/issues/8510) about ISO 8601 support, it's been open for years.
+
+## Read a date from a `TEXT` datatype
+
+To read dates you must use one of the following formats:
+
+- RFC2822: For example, `Tue, 1 Jul 2003 10:52:37 +0200`
+- RFC3339: For example, `1996-12-19T16:39:57-08:00`
+- Unix time (milliseconds): For example, `1677289988536`
+
+We can confirm the aforementioned by querying a test table with a column for each of the aforementioned formats.
+
+First, we create a new table that uses the `TEXT` datatype:
+
+```sql title='SQLite table schema'
+CREATE TABLE test (iso8601 text, rfc2822 text, rfc3339 text, unix numeric);
+```
+
+Next, we defined a a Prisma schema that covers the above database schema:
+
+```none title='Prisma model'
+model Test {
+  iso8601 DateTime
+  rfc2822 DateTime
+  rfc3339 DateTime
+  unix DateTime @id
+}
+```
+
+And populate a table with the following test data:
+
+```none title='Query output'
+sqlite> select * from test;
+2016-09-01T10:11:12|Tue, 1 Jul 2003 10:52:37 +0200|1996-12-19T16:39:57-08:00|1472782272
+```
+
+Next, we query the database for each column individually:
+
+```javascript title='Query the database'
+const fields = ['iso8601', 'rfc2822', 'rfc3339', 'unix'];
+for (const field of fields) {
+  try {
+    const obj = await prisma.test.findMany({
+      select: {
+        [field]: true,
+      },
+    });
+    console.log(obj);
+  } catch (e) {
+    console.log(e.meta.message);
+  }
+}
+```
+
+The script outputs the following to the console:
+
+```none title='Output'
+Could not convert value "2016-09-01T10:11:12" of the field `iso8601` to type `DateTime`.
+[ { rfc2822: 2003-07-01T08:52:37.000Z } ]
+[ { rfc3339: 1996-12-20T00:39:57.000Z } ]
+[ { unix: 1970-01-18T01:06:22.272Z } ]
+```
+
+It is worth noting that, if instead of an existing SQLite database, you start with a new database, Prisma creates a `DateTime` schema field as a `DATETIME` datatype in SQLite:
+
+```none title='Migration created from model'
+-- CreateTable
+CREATE TABLE "Test" (
+    "iso8601" DATETIME,
+    "rfc2822" DATETIME,
+    "rfc3339" DATETIME,
+    "unix" DATETIME NOT NULL PRIMARY KEY
+);
+```
+
+So you're probably going to be working with Unix epoch time in milliseconds in many cases. But as the above demonstrates, you *can* read dates in either RFC 2822 or RFC 3339 formats if necessary.
+
+## Write a human readable date to a sidecar column
+
+One approach to writing a humanized date field is with a sidecar column. For example, consider the following:
+
+```sql
+CREATE TABLE mytable (unix DATETIME, sidecar TEXT);
+CREATE TRIGGER mytable_insert AFTER INSERT ON mytable BEGIN
+  UPDATE mytable SET sidecar = strftime('%Y-%m-%d %H:%M:%S', datetime(unix,'unixepoch', 'localtime')) WHERE unix = NEW.unix;
+END;
+```
+
+Now when you insert a date with Prisma, a human readable date is inserted as well:
+
+```
+sqlite> INSERT INTO mytable(unix) VALUES(1472782272);
+sqlite> SELECT * FROM mytable;
+1472782272|2016-09-01 22:11:12
+```
+
+## References
+
+- [Datatypes In SQLite](https://www.sqlite.org/datatype3.html)
+- [When should one use data type REAL versus NUMERIC in sqlite?](https://stackoverflow.com/questions/52310300/when-should-one-use-data-type-real-versus-numeric-in-sqlite)
+- [What's the difference between ISO 8601 and RFC 3339 Date Formats?](https://stackoverflow.com/questions/522251/whats-the-difference-between-iso-8601-and-rfc-3339-date-formats)
+- [iso8601: Format a Datetime object: ISO 8601, RFC 2822 or RFC 3339](https://rdrr.io/cran/anytime/man/iso8601.html)
